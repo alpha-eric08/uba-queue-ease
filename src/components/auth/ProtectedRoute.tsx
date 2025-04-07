@@ -11,7 +11,6 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    // You could add a loading indicator here
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
