@@ -36,6 +36,45 @@ export type Database = {
         }
         Relationships: []
       }
+      queue_entries: {
+        Row: {
+          branch: string
+          created_at: string
+          estimated_wait_time: number
+          id: string
+          name: string
+          phone: string
+          position: number
+          queue_number: string
+          service_type: string
+          status: string
+        }
+        Insert: {
+          branch: string
+          created_at?: string
+          estimated_wait_time: number
+          id?: string
+          name: string
+          phone: string
+          position: number
+          queue_number: string
+          service_type: string
+          status?: string
+        }
+        Update: {
+          branch?: string
+          created_at?: string
+          estimated_wait_time?: number
+          id?: string
+          name?: string
+          phone?: string
+          position?: number
+          queue_number?: string
+          service_type?: string
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

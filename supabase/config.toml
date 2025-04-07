@@ -19,3 +19,4 @@ api_url = "http://localhost"
 
 [functions.queue-operations]
 verify_jwt = false
+
