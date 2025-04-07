@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { Clock, Users, Bell, BellOff, MapPin } from 'lucide-react';
+import { Clock, Users, Bell, BellOff, MapPin, User, Phone } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 interface QueueData {
   id: string;
@@ -107,6 +108,25 @@ const TrackQueue = () => {
     
     return serviceMap[serviceType] || serviceType;
   };
+  
+  // Helper function to format phone number
+  const formatPhone = (phone: string) => {
+    // Simple formatting for demonstration
+    return phone.length === 10 
+      ? `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`
+      : phone;
+  };
+  
+  // Helper function to format date
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
 
   return (
     <Layout>
@@ -156,6 +176,42 @@ const TrackQueue = () => {
               </div>
               
               <div className="p-6 space-y-6">
+                {/* Customer Information Section */}
+                <div className="bg-uba-lightgray rounded-lg p-4">
+                  <h3 className="font-medium mb-3 flex items-center gap-2">
+                    <User size={18} className="text-uba-red" />
+                    Customer Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <div className="text-sm text-gray-500">Name</div>
+                      <div className="font-medium">{trackingData.name}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-gray-500">Phone</div>
+                      <div className="font-medium">{formatPhone(trackingData.phone)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-gray-500">Queue Created</div>
+                      <div className="font-medium">{formatDate(trackingData.created_at)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm text-gray-500">Status</div>
+                      <div className="font-medium capitalize">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          trackingData.status === 'waiting' 
+                            ? 'bg-yellow-100 text-yellow-800' 
+                            : trackingData.status === 'serving' 
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {trackingData.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
                   <div>
                     <div className="text-sm text-gray-500">Your Queue Number</div>
@@ -223,22 +279,33 @@ const TrackQueue = () => {
                   <Progress value={trackingData.progress} />
                 </div>
                 
-                <div className="border-t pt-6">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      {notifyEnabled ? (
-                        <Bell size={20} className="text-uba-red" />
-                      ) : (
-                        <BellOff size={20} className="text-gray-400" />
-                      )}
-                      <span className="font-medium">Notify me when I'm 5 spots away</span>
+                {trackingData.status === 'waiting' && (
+                  <div className="border-t pt-6">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        {notifyEnabled ? (
+                          <Bell size={20} className="text-uba-red" />
+                        ) : (
+                          <BellOff size={20} className="text-gray-400" />
+                        )}
+                        <span className="font-medium">Notify me when I'm 5 spots away</span>
+                      </div>
+                      <Switch 
+                        checked={notifyEnabled} 
+                        onCheckedChange={handleNotifyToggle} 
+                      />
                     </div>
-                    <Switch 
-                      checked={notifyEnabled} 
-                      onCheckedChange={handleNotifyToggle} 
-                    />
                   </div>
-                </div>
+                )}
+                
+                {trackingData.status === 'serving' && (
+                  <Alert className="bg-green-50 border-green-200">
+                    <AlertTitle className="text-green-800">It's your turn!</AlertTitle>
+                    <AlertDescription className="text-green-700">
+                      Please proceed to the service counter. Your number is being called.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
               
               <div className="bg-uba-lightgray p-6">
