@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const serviceTypes = [
   { id: 'deposit', name: 'Cash Deposit' },
@@ -18,14 +20,16 @@ const serviceTypes = [
 ];
 
 const JoinQueue = () => {
-  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     serviceType: '',
+    branch: 'Marina Branch, Lagos', // Default branch, could be made selectable
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [queueNumber, setQueueNumber] = useState('');
+  const [queueData, setQueueData] = useState<any>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -36,31 +40,42 @@ const JoinQueue = () => {
     setFormData((prev) => ({ ...prev, serviceType: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate form
     if (!formData.name || !formData.phone || !formData.serviceType) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all required fields.',
-        variant: 'destructive',
-      });
+      toast.error('Please fill in all required fields.');
       return;
     }
     
-    // Generate a random queue number (in real app, this would come from backend)
-    const random = Math.floor(Math.random() * 100);
-    const generatedQueueNumber = `A${random}`;
-    
-    // Set queue number and show confirmation
-    setQueueNumber(generatedQueueNumber);
-    setIsSubmitted(true);
-
-    toast({
-      title: 'Queue Number Generated',
-      description: `Your queue number is ${generatedQueueNumber}`,
-    });
+    try {
+      setIsSubmitting(true);
+      
+      // Call the queue-operations function to join queue
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'join',
+          queueData: formData
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        setQueueData(data.queueEntry);
+        setIsSubmitted(true);
+        
+        toast.success(`Queue number generated: ${data.queueEntry.queue_number}`);
+      } else {
+        throw new Error('Failed to generate queue number');
+      }
+    } catch (error: any) {
+      console.error('Error joining queue:', error);
+      toast.error(`Error: ${error.message || 'Failed to join queue'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -115,8 +130,12 @@ const JoinQueue = () => {
                   </RadioGroup>
                 </div>
 
-                <Button type="submit" className="w-full bg-uba-red hover:bg-uba-red/90">
-                  Get Queue Number
+                <Button 
+                  type="submit" 
+                  className="w-full bg-uba-red hover:bg-uba-red/90"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Processing..." : "Get Queue Number"}
                 </Button>
               </form>
             </div>
@@ -131,7 +150,7 @@ const JoinQueue = () => {
                 
                 <div className="bg-uba-lightgray px-8 py-4 rounded-lg my-4">
                   <div className="text-sm text-gray-600">Your Queue Number</div>
-                  <div className="text-4xl font-bold text-uba-red">{queueNumber}</div>
+                  <div className="text-4xl font-bold text-uba-red">{queueData?.queue_number}</div>
                 </div>
                 
                 <div className="space-y-2 text-center max-w-md">
@@ -150,7 +169,7 @@ const JoinQueue = () => {
                     </Button>
                     <Button 
                       className="bg-uba-red hover:bg-uba-red/90"
-                      onClick={() => window.location.href = '/track-queue'}
+                      onClick={() => navigate(`/track-queue?queue=${queueData?.queue_number}`)}
                     >
                       Track My Queue
                     </Button>

@@ -1,69 +1,111 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
 import { Clock, Users, Bell, BellOff, MapPin } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { supabase } from '@/integrations/supabase/client';
+
+interface QueueData {
+  id: string;
+  queue_number: string;
+  name: string;
+  phone: string;
+  branch: string;
+  service_type: string;
+  status: string;
+  position: number;
+  estimated_wait_time: number;
+  created_at: string;
+  totalAhead: number;
+  progress: number;
+}
 
 const TrackQueue = () => {
-  const { toast } = useToast();
-  const [queueNumber, setQueueNumber] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [queueNumber, setQueueNumber] = useState(searchParams.get('queue') || '');
   const [trackingData, setTrackingData] = useState<QueueData | null>(null);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  interface QueueData {
-    number: string;
-    branch: string;
-    service: string;
-    position: number;
-    estimatedTime: number;
-    totalAhead: number;
-    progress: number;
-  }
+  // Check if we have a queue number in the URL params on load
+  useEffect(() => {
+    const queueParam = searchParams.get('queue');
+    if (queueParam) {
+      setQueueNumber(queueParam);
+      handleSearch(null, queueParam);
+    }
+  }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e: React.FormEvent | null, queueParam?: string) => {
+    if (e) e.preventDefault();
     
-    if (!queueNumber) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a queue number',
-        variant: 'destructive',
-      });
+    const queueToSearch = queueParam || queueNumber;
+    
+    if (!queueToSearch) {
+      toast.error('Please enter a queue number');
       return;
     }
     
-    // Mock data - in a real app, this would be fetched from an API
-    const mockData: QueueData = {
-      number: queueNumber,
-      branch: 'Marina Branch, Lagos',
-      service: 'Cash Withdrawal',
-      position: 5,
-      estimatedTime: 15,
-      totalAhead: 4,
-      progress: 55,
-    };
-    
-    setTrackingData(mockData);
+    try {
+      setIsLoading(true);
+      
+      // Call the queue-operations function to track queue
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'track',
+          queueData: { queueNumber: queueToSearch }
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        setTrackingData(data.queueData);
+        // Update URL with queue number for easy sharing
+        setSearchParams({ queue: queueToSearch });
+      } else {
+        throw new Error(data?.message || 'Queue number not found');
+      }
+    } catch (error: any) {
+      console.error('Error tracking queue:', error);
+      toast.error(`Error: ${error.message || 'Failed to track queue'}`);
+      setTrackingData(null);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleNotifyToggle = (checked: boolean) => {
     setNotifyEnabled(checked);
     
     if (checked) {
-      toast({
-        title: 'Notification Enabled',
-        description: 'We will notify you when you are 5 spots away from your turn.',
+      toast.success('Notification Enabled', {
+        description: 'We will notify you when you are 5 spots away from your turn.'
       });
     } else {
-      toast({
-        title: 'Notification Disabled',
-        description: 'You will not receive notifications about your queue position.',
+      toast.info('Notification Disabled', {
+        description: 'You will not receive notifications about your queue position.'
       });
     }
+  };
+
+  // Helper function to get service name from service type
+  const getServiceName = (serviceType: string) => {
+    const serviceMap: Record<string, string> = {
+      'deposit': 'Cash Deposit',
+      'withdrawal': 'Cash Withdrawal',
+      'account': 'Account Services',
+      'loan': 'Loan Inquiries',
+      'card': 'Card Services',
+      'other': 'Other Inquiries'
+    };
+    
+    return serviceMap[serviceType] || serviceType;
   };
 
   return (
@@ -87,8 +129,12 @@ const TrackQueue = () => {
                       placeholder="e.g. A12"
                       className="flex-1"
                     />
-                    <Button type="submit" className="bg-uba-red hover:bg-uba-red/90">
-                      Track Queue
+                    <Button 
+                      type="submit" 
+                      className="bg-uba-red hover:bg-uba-red/90"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Searching...' : 'Track Queue'}
                     </Button>
                   </div>
                 </div>
@@ -113,7 +159,7 @@ const TrackQueue = () => {
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
                   <div>
                     <div className="text-sm text-gray-500">Your Queue Number</div>
-                    <div className="text-4xl font-bold text-uba-red">{trackingData.number}</div>
+                    <div className="text-4xl font-bold text-uba-red">{trackingData.queue_number}</div>
                   </div>
                   
                   <div className="flex flex-col md:items-end">
@@ -121,7 +167,7 @@ const TrackQueue = () => {
                       <MapPin size={16} />
                       <span>{trackingData.branch}</span>
                     </div>
-                    <div className="font-medium">{trackingData.service}</div>
+                    <div className="font-medium">{getServiceName(trackingData.service_type)}</div>
                   </div>
                 </div>
                 
@@ -148,7 +194,7 @@ const TrackQueue = () => {
                       <div>
                         <div className="text-sm text-gray-500">Estimated Wait</div>
                         <div className="text-xl font-semibold">
-                          ~{trackingData.estimatedTime}<span className="text-sm text-gray-500"> minutes</span>
+                          ~{trackingData.estimated_wait_time}<span className="text-sm text-gray-500"> minutes</span>
                         </div>
                       </div>
                     </div>
