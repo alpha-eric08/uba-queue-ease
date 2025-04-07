@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
 import { TabsContent, Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -13,9 +12,11 @@ import {
   Flag, 
   ChevronUp, 
   ChevronDown,
-  ArrowUpDown
+  ArrowUpDown,
+  LogOut
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import AdminUserManagement from '@/components/admin/AdminUserManagement';
 
 // Mock customer data
 const mockCustomers = [
@@ -80,6 +81,7 @@ const serviceStats = [
 ];
 
 const AdminDashboard = () => {
+  const { signOut, profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState('all');
   const [customers, setCustomers] = useState(mockCustomers);
@@ -133,12 +135,31 @@ const AdminDashboard = () => {
   return (
     <Layout>
       <div className="container my-8">
-        <h1 className="text-3xl font-bold text-uba-gray mb-8">Admin Dashboard</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-uba-gray">Admin Dashboard</h1>
+          <div className="flex items-center gap-4">
+            {profile && (
+              <div className="text-right">
+                <p className="font-medium">{profile.full_name || profile.email}</p>
+                <p className="text-sm text-gray-500 capitalize">{profile.role}</p>
+              </div>
+            )}
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2"
+              onClick={() => signOut()}
+            >
+              <LogOut size={16} />
+              <span>Log Out</span>
+            </Button>
+          </div>
+        </div>
         
         <Tabs defaultValue="dashboard">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="queue">Queue Management</TabsTrigger>
+            <TabsTrigger value="admins">Admin Users</TabsTrigger>
           </TabsList>
           
           <TabsContent value="dashboard">
@@ -397,6 +418,10 @@ const AdminDashboard = () => {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="admins">
+            <AdminUserManagement />
           </TabsContent>
         </Tabs>
       </div>

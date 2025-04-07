@@ -1,10 +1,13 @@
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user } = useAuth();
+  const location = useLocation();
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
@@ -22,12 +25,18 @@ const Navbar = () => {
             <Link to="/" className="text-uba-gray hover:text-uba-red font-medium">Home</Link>
             <Link to="/join-queue" className="text-uba-gray hover:text-uba-red font-medium">Join Queue</Link>
             <Link to="/track-queue" className="text-uba-gray hover:text-uba-red font-medium">Track Queue</Link>
-            <Link to="/admin" className="text-uba-gray hover:text-uba-red font-medium">Admin Portal</Link>
+            {user && (
+              <Link to="/admin" className="text-uba-gray hover:text-uba-red font-medium">Admin Portal</Link>
+            )}
           </div>
 
-          {/* Login/Signup Button */}
+          {/* Login/Signup Button or Admin Button */}
           <div className="hidden md:block">
-            <Link to="/login" className="btn-outline">Login / Signup</Link>
+            {user ? (
+              <Link to="/admin" className="btn-outline">Admin Dashboard</Link>
+            ) : (
+              <Link to="/login" className="btn-outline">Admin Login</Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -45,8 +54,14 @@ const Navbar = () => {
               <Link to="/" className="text-uba-gray hover:text-uba-red font-medium py-2" onClick={toggleMenu}>Home</Link>
               <Link to="/join-queue" className="text-uba-gray hover:text-uba-red font-medium py-2" onClick={toggleMenu}>Join Queue</Link>
               <Link to="/track-queue" className="text-uba-gray hover:text-uba-red font-medium py-2" onClick={toggleMenu}>Track Queue</Link>
-              <Link to="/admin" className="text-uba-gray hover:text-uba-red font-medium py-2" onClick={toggleMenu}>Admin Portal</Link>
-              <Link to="/login" className="btn-primary text-center" onClick={toggleMenu}>Login / Signup</Link>
+              {user && (
+                <Link to="/admin" className="text-uba-gray hover:text-uba-red font-medium py-2" onClick={toggleMenu}>Admin Portal</Link>
+              )}
+              {user ? (
+                <Link to="/admin" className="btn-primary text-center" onClick={toggleMenu}>Admin Dashboard</Link>
+              ) : (
+                <Link to="/login" className="btn-primary text-center" onClick={toggleMenu}>Admin Login</Link>
+              )}
             </div>
           </div>
         )}

@@ -11,9 +11,26 @@ import TrackQueue from "./pages/TrackQueue";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 
 // Create a new instance of QueryClient
 const queryClient = new QueryClient();
+
+const AppRoutes = () => (
+  <Routes>
+    <Route path="/" element={<Index />} />
+    <Route path="/join-queue" element={<JoinQueue />} />
+    <Route path="/track-queue" element={<TrackQueue />} />
+    <Route path="/admin" element={
+      <ProtectedRoute>
+        <Admin />
+      </ProtectedRoute>
+    } />
+    <Route path="/login" element={<Login />} />
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
 
 const App: React.FC = () => (
   <React.StrictMode>
@@ -22,14 +39,9 @@ const App: React.FC = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/join-queue" element={<JoinQueue />} />
-            <Route path="/track-queue" element={<TrackQueue />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
