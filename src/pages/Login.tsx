@@ -6,9 +6,11 @@ import { Label } from '@/components/ui/label';
 import Layout from '@/components/layout/Layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 
 const Login = () => {
-  const { user, loading, signIn } = useAuth();
+  const { user, loading, signIn, createInitialAdmin } = useAuth();
+  const [initialAdminLoading, setInitialAdminLoading] = useState(false);
   
   const [loginData, setLoginData] = useState({
     email: '',
@@ -23,6 +25,15 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     await signIn(loginData.email, loginData.password);
+  };
+
+  const handleCreateInitialAdmin = async () => {
+    try {
+      setInitialAdminLoading(true);
+      await createInitialAdmin();
+    } finally {
+      setInitialAdminLoading(false);
+    }
   };
 
   // If user is already logged in, redirect to admin page
@@ -77,7 +88,21 @@ const Login = () => {
             </form>
             
             <div className="mt-6 text-center text-sm">
-              <p className="text-gray-600">
+              <div className="flex items-center justify-center gap-2 text-amber-700 bg-amber-50 p-3 rounded-md mb-4">
+                <AlertCircle size={16} />
+                <p>First time? Create the initial admin account below.</p>
+              </div>
+              
+              <Button 
+                variant="outline"
+                className="w-full mt-2"
+                onClick={handleCreateInitialAdmin}
+                disabled={initialAdminLoading}
+              >
+                {initialAdminLoading ? 'Creating...' : 'Create Initial Admin User'}
+              </Button>
+              
+              <p className="mt-4 text-gray-600">
                 Only authorized admins can access this system.
               </p>
             </div>

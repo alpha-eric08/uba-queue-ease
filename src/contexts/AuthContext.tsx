@@ -21,6 +21,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   createAdmin: (email: string, password: string, fullName: string) => Promise<void>;
+  createInitialAdmin: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -146,8 +147,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const createInitialAdmin = async () => {
+    try {
+      setLoading(true);
+      // Call the create-initial-admin function
+      const { data, error } = await supabase.functions.invoke('create-initial-admin');
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success('Initial admin user created successfully! You can now log in with the default credentials.');
+      return data;
+    } catch (error: any) {
+      console.error('Error creating initial admin:', error);
+      toast.error(`Error creating initial admin: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, profile, session, loading, signIn, signOut, createAdmin }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      session, 
+      loading, 
+      signIn, 
+      signOut, 
+      createAdmin, 
+      createInitialAdmin
+    }}>
       {children}
     </AuthContext.Provider>
   );
