@@ -19,118 +19,171 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import AdminUserManagement from '@/components/admin/AdminUserManagement';
-
-// Mock customer data
-const mockCustomers = [
-  { 
-    id: 1, 
-    name: 'John Smith', 
-    number: 'A12', 
-    service: 'Cash Withdrawal',
-    time: '10:15 AM',
-    wait: 20,
-    status: 'waiting',
-    priority: 'regular'
-  },
-  { 
-    id: 2, 
-    name: 'Amara Okafor', 
-    number: 'A13', 
-    service: 'Account Services',
-    time: '10:20 AM',
-    wait: 15,
-    status: 'waiting',
-    priority: 'vip'
-  },
-  { 
-    id: 3, 
-    name: 'Ibrahim Mohammed', 
-    number: 'A14', 
-    service: 'Loan Inquiries',
-    time: '10:25 AM',
-    wait: 12,
-    status: 'waiting',
-    priority: 'regular'
-  },
-  { 
-    id: 4, 
-    name: 'Sarah Johnson', 
-    number: 'A15', 
-    service: 'Cash Deposit',
-    time: '10:30 AM',
-    wait: 10,
-    status: 'waiting',
-    priority: 'regular'
-  },
-  { 
-    id: 5, 
-    name: 'Oluwaseun Adeyemi', 
-    number: 'A16', 
-    service: 'Card Services',
-    time: '10:35 AM',
-    wait: 8,
-    status: 'waiting',
-    priority: 'emergency'
-  },
-];
-
-const serviceStats = [
-  { service: 'Cash Deposit', count: 45, avgWait: 12 },
-  { service: 'Cash Withdrawal', count: 37, avgWait: 15 },
-  { service: 'Account Services', count: 22, avgWait: 18 },
-  { service: 'Loan Inquiries', count: 8, avgWait: 25 },
-  { service: 'Card Services', count: 15, avgWait: 10 },
-];
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { QueueEntry } from '@/types/queue';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const AdminDashboard = () => {
   const { signOut, profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState('all');
-  const [customers, setCustomers] = useState(mockCustomers);
   
-  const availableDesks = 4;
-  const occupiedDesks = 2;
-  const totalCustomers = customers.length;
-  const avgWaitTime = 12;
+  // Fetch queue entries from Supabase
+  const { data: queueEntries = [], isLoading: isLoadingQueue, refetch: refetchQueue } = useQuery({
+    queryKey: ['queueEntries'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('queue_entries')
+        .select('*')
+        .order('position', { ascending: true });
 
-  const handlePriorityChange = (id: number, newPriority: string) => {
-    const updatedCustomers = customers.map(customer => 
-      customer.id === id ? { ...customer, priority: newPriority } : customer
-    );
-    setCustomers(updatedCustomers);
-  };
+      if (error) {
+        toast.error(`Failed to fetch queue entries: ${error.message}`);
+        return [];
+      }
 
-  const handleMoveCustomer = (id: number, direction: 'up' | 'down') => {
-    const currentIndex = customers.findIndex(customer => customer.id === id);
-    if (
-      (direction === 'up' && currentIndex === 0) || 
-      (direction === 'down' && currentIndex === customers.length - 1)
-    ) {
-      return;
+      return data as QueueEntry[];
     }
-    
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    const updatedCustomers = [...customers];
-    const [movedCustomer] = updatedCustomers.splice(currentIndex, 1);
-    updatedCustomers.splice(newIndex, 0, movedCustomer);
-    
-    setCustomers(updatedCustomers);
+  });
+
+  // Fetch service statistics
+  const { data: serviceStats = [] } = useQuery({
+    queryKey: ['serviceStats'],
+    queryFn: async () => {
+      const { data: entries, error } = await supabase
+        .from('queue_entries')
+        .select('service_type');
+
+      if (error) {
+        toast.error(`Failed to fetch service statistics: ${error.message}`);
+        return [];
+      }
+
+      // Group entries by service type and count occurrences
+      const stats = entries.reduce((acc: Record<string, number>, entry) => {
+        const service = entry.service_type;
+        acc[service] = (acc[service] || 0) + 1;
+        return acc;
+      }, {});
+
+      return Object.entries(stats).map(([service, count]) => ({
+        service,
+        count,
+        avgWait: Math.floor(Math.random() * 20) + 5 // Placeholder for average wait time
+      }));
+    }
+  });
+
+  const availableDesks = 4; // Static data for now
+  const occupiedDesks = 2; // Static data for now
+  const totalCustomers = queueEntries.length;
+  const avgWaitTime = queueEntries.length > 0 
+    ? Math.round(queueEntries.reduce((sum, entry) => sum + entry.estimated_wait_time, 0) / queueEntries.length) 
+    : 0;
+
+  // Handle priority change
+  const handlePriorityChange = async (id: string, newPriority: string) => {
+    try {
+      // In a real implementation, we would update a priority field in the database
+      // For now, we'll just show a toast notification
+      toast.success(`Changed priority to ${newPriority} for customer ${id}`);
+      
+      // Refetch queue data
+      refetchQueue();
+    } catch (error) {
+      toast.error('Failed to update priority');
+    }
   };
 
-  const filteredCustomers = customers.filter(customer => 
-    (customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     customer.number.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    (filterService === 'all' || customer.service === filterService)
+  // Handle moving customer in queue
+  const handleMoveCustomer = async (id: string, direction: 'up' | 'down') => {
+    try {
+      const currentIndex = queueEntries.findIndex(customer => customer.id === id);
+      if (
+        (direction === 'up' && currentIndex === 0) || 
+        (direction === 'down' && currentIndex === queueEntries.length - 1)
+      ) {
+        return;
+      }
+
+      const currentEntry = queueEntries[currentIndex];
+      const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      const otherEntry = queueEntries[newIndex];
+      
+      // Swap positions
+      const { error: error1 } = await supabase
+        .from('queue_entries')
+        .update({ position: otherEntry.position })
+        .eq('id', currentEntry.id);
+      
+      const { error: error2 } = await supabase
+        .from('queue_entries')
+        .update({ position: currentEntry.position })
+        .eq('id', otherEntry.id);
+
+      if (error1 || error2) {
+        throw new Error('Failed to update positions');
+      }
+
+      toast.success('Queue position updated');
+      refetchQueue();
+    } catch (error) {
+      toast.error('Failed to update position');
+    }
+  };
+
+  // Handle serving a customer
+  const handleServeCustomer = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('queue_entries')
+        .update({ status: 'serving' })
+        .eq('id', id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast.success('Customer is now being served');
+      refetchQueue();
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const filteredQueueEntries = queueEntries.filter(entry => 
+    (entry.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     entry.queue_number.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (filterService === 'all' || entry.service_type === filterService)
   );
 
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
+  // Get unique service types for filter dropdown
+  const serviceTypes = Array.from(new Set(queueEntries.map(entry => entry.service_type)));
+
+  const getPriorityBadge = (status: string) => {
+    // Using status as priority for now
+    switch (status) {
       case 'vip':
         return <Badge className="bg-blue-500">VIP</Badge>;
       case 'emergency':
         return <Badge className="bg-red-500">Emergency</Badge>;
       default:
         return <Badge className="bg-gray-500">Regular</Badge>;
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'serving':
+        return <Badge className="bg-green-500">Serving</Badge>;
+      case 'completed':
+        return <Badge className="bg-blue-500">Completed</Badge>;
+      case 'cancelled':
+        return <Badge className="bg-red-500">Cancelled</Badge>;
+      default:
+        return <Badge className="bg-yellow-500">Waiting</Badge>;
     }
   };
 
@@ -312,109 +365,123 @@ const AdminDashboard = () => {
                     </div>
                     
                     <div className="flex gap-2">
-                      <Button variant="outline" className="flex items-center gap-2">
-                        <Filter size={16} />
-                        <span>Filter</span>
-                      </Button>
-                      <Button variant="outline" className="flex items-center gap-2">
-                        <Flag size={16} />
-                        <span>Priority</span>
-                      </Button>
+                      <select 
+                        className="border rounded px-3 py-2 text-sm"
+                        value={filterService}
+                        onChange={(e) => setFilterService(e.target.value)}
+                      >
+                        <option value="all">All Services</option>
+                        {serviceTypes.map((service, index) => (
+                          <option key={index} value={service}>{service}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
               </div>
               
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <div className="flex items-center gap-1">
-                          Number
-                          <ArrowUpDown size={14} />
-                        </div>
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Customer
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Service
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        <div className="flex items-center gap-1">
-                          Wait Time
-                          <ArrowUpDown size={14} />
-                        </div>
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Priority
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredCustomers.map((customer) => (
-                      <tr key={customer.id}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium text-uba-red">{customer.number}</div>
-                          <div className="text-xs text-gray-500">{customer.time}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {customer.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {customer.service}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">{customer.wait} mins</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            {getPriorityBadge(customer.priority)}
-                            <select 
-                              className="text-xs border rounded p-1"
-                              value={customer.priority}
-                              onChange={(e) => handlePriorityChange(customer.id, e.target.value)}
-                            >
-                              <option value="regular">Regular</option>
-                              <option value="vip">VIP</option>
-                              <option value="emergency">Emergency</option>
-                            </select>
+              {isLoadingQueue ? (
+                <div className="p-8 text-center">
+                  <p>Loading queue data...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center gap-1">
+                            Number
+                            <ArrowUpDown size={14} />
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <div className="flex gap-2 items-center">
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0"
-                              onClick={() => handleMoveCustomer(customer.id, 'up')}
-                            >
-                              <ChevronUp size={16} />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0"
-                              onClick={() => handleMoveCustomer(customer.id, 'down')}
-                            >
-                              <ChevronDown size={16} />
-                            </Button>
-                            <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700">
-                              Serve
-                            </Button>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Customer
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Service
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center gap-1">
+                            Wait Time
+                            <ArrowUpDown size={14} />
                           </div>
-                        </td>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredQueueEntries.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                            No customers in queue matching your criteria
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredQueueEntries.map((entry) => (
+                          <tr key={entry.id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="font-medium text-uba-red">{entry.queue_number}</div>
+                              <div className="text-xs text-gray-500">
+                                {format(new Date(entry.created_at), 'h:mm a')}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {entry.name}
+                              <div className="text-xs text-gray-500">{entry.phone}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {entry.service_type}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-sm text-gray-900">{entry.estimated_wait_time} mins</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {getStatusBadge(entry.status)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex gap-2 items-center">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleMoveCustomer(entry.id, 'up')}
+                                >
+                                  <ChevronUp size={16} />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleMoveCustomer(entry.id, 'down')}
+                                >
+                                  <ChevronDown size={16} />
+                                </Button>
+                                <Button 
+                                  variant="default" 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700"
+                                  onClick={() => handleServeCustomer(entry.id)}
+                                  disabled={entry.status === 'serving'}
+                                >
+                                  {entry.status === 'serving' ? 'Serving' : 'Serve'}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               
-              {filteredCustomers.length === 0 && (
+              {filteredQueueEntries.length === 0 && !isLoadingQueue && (
                 <div className="p-8 text-center text-gray-500">
                   No customers match your search criteria
                 </div>
