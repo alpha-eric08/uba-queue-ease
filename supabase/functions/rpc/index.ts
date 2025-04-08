@@ -19,35 +19,69 @@ serve(async (req) => {
     )
     
     const { name, params } = await req.json()
+    console.log(`RPC function called: ${name}`, params)
     
     if (name === 'create_admin_profile') {
       const { user_id, user_email, user_full_name } = params
+      console.log(`Creating admin profile for user: ${user_id}, ${user_email}`)
       
-      // Execute raw SQL to bypass type issues
-      const { data, error } = await supabaseAdmin.rpc(
-        'execute_sql', 
-        { 
-          sql_query: `
-            INSERT INTO profiles (id, email, full_name, role)
-            VALUES ('${user_id}', '${user_email}', '${user_full_name}', 'admin')
-            RETURNING id
-          `
+      try {
+        // First attempt: direct insert
+        const { data: insertData, error: insertError } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: user_id,
+            email: user_email,
+            full_name: user_full_name,
+            role: 'admin'
+          })
+          .select()
+        
+        if (insertError) {
+          console.log('Direct insert failed:', insertError.message)
+          
+          // Second attempt: direct SQL query
+          const { data: sqlData, error: sqlError } = await supabaseAdmin.rpc(
+            'execute_sql',
+            {
+              sql_query: `
+                INSERT INTO profiles (id, email, full_name, role)
+                VALUES ('${user_id}', '${user_email}', '${user_full_name}', 'admin')
+                RETURNING id
+              `
+            }
+          )
+          
+          if (sqlError) {
+            console.error('SQL execution failed:', sqlError.message)
+            throw sqlError
+          }
+          
+          return new Response(
+            JSON.stringify({ success: true, data: sqlData, method: 'sql-query' }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200,
+            }
+          )
         }
-      )
-      
-      if (error) throw error
-      
-      return new Response(
-        JSON.stringify({ success: true, data }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        }
-      )
+        
+        return new Response(
+          JSON.stringify({ success: true, data: insertData, method: 'direct-insert' }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        )
+      } catch (err) {
+        console.error('Admin profile creation failed with all methods:', err.message)
+        throw new Error(`Failed to create admin profile: ${err.message}`)
+      }
     }
     
     if (name === 'execute_sql') {
       const { sql_query } = params
+      console.log('Executing SQL query:', sql_query.substring(0, 100) + '...')
       
       // Execute the SQL query directly
       const { data, error } = await supabaseAdmin.rpc(
@@ -55,7 +89,10 @@ serve(async (req) => {
         { sql_query }
       )
       
-      if (error) throw error
+      if (error) {
+        console.error('SQL execution error:', error.message)
+        throw error
+      }
       
       return new Response(
         JSON.stringify({ success: true, data }),
@@ -74,6 +111,8 @@ serve(async (req) => {
       }
     )
   } catch (error) {
+    console.error('RPC function error:', error.message)
+    
     return new Response(
       JSON.stringify({ error: error.message }),
       {

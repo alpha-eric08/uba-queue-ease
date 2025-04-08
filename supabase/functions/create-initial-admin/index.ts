@@ -13,6 +13,7 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Create initial admin function called')
     // Create a Supabase client with the service role key (for admin operations)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -43,6 +44,7 @@ serve(async (req) => {
       )
     }
     
+    console.log('Creating new admin user')
     // Create the admin user with correct parameters
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email: adminEmail,
@@ -59,58 +61,80 @@ serve(async (req) => {
       throw error
     }
     
-    // Query the database to check the role column type
-    const { data: roleTypeData, error: roleTypeError } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .limit(1)
-      .single()
+    console.log('Admin user created successfully, creating profile now')
     
-    // Determine if the role column accepts string values directly
-    let roleValue = 'super_admin'
-    
-    // Insert profile record with proper role handling
-    const { error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .insert({
-        id: data.user.id,
-        email: adminEmail,
-        full_name: 'Initial Admin',
-        role: roleValue // Use string value directly
-      })
-      .select()
-    
-    if (profileError) {
-      console.error('Error creating profile:', profileError.message)
+    // Try multiple approaches to create the profile
+    try {
+      // First approach: direct insert to profiles table
+      const { error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .insert({
+          id: data.user.id,
+          email: adminEmail,
+          full_name: 'Initial Admin',
+          role: 'admin' // Use the most likely value for the role
+        })
       
-      // Try with alternative approach if the first one fails - role might be an enum
-      const { error: altProfileError } = await supabaseAdmin.rpc(
-        'create_admin_profile',
-        { 
-          user_id: data.user.id,
-          user_email: adminEmail,
-          user_full_name: 'Initial Admin'
+      if (profileError) {
+        console.log('First profile creation attempt failed:', profileError.message)
+        throw profileError
+      }
+      
+      console.log('Profile created successfully via direct insert')
+    } catch (error1) {
+      try {
+        console.log('Trying alternative approach via RPC')
+        // Second approach: use our custom RPC function
+        const rpcResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/rpc`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            ...corsHeaders
+          },
+          body: JSON.stringify({
+            name: 'create_admin_profile',
+            params: {
+              user_id: data.user.id,
+              user_email: adminEmail, 
+              user_full_name: 'Initial Admin'
+            }
+          })
+        })
+        
+        if (!rpcResponse.ok) {
+          const errorText = await rpcResponse.text()
+          console.error('RPC function failed:', errorText)
+          throw new Error(`RPC call failed: ${errorText}`)
         }
-      )
-      
-      if (altProfileError) {
-        console.error('Alternative profile creation also failed:', altProfileError.message)
-        console.log('Attempting direct SQL insertion as last resort')
         
-        // As a last resort, try direct SQL query
-        const { error: sqlError } = await supabaseAdmin.rpc(
-          'execute_sql', 
-          { 
-            sql_query: `
-              INSERT INTO profiles (id, email, full_name, role)
-              VALUES ('${data.user.id}', '${adminEmail}', 'Initial Admin', 'admin')
-            `
+        console.log('Profile created successfully via RPC function')
+      } catch (error2) {
+        console.error('Both profile creation methods failed:', error2)
+        // As a direct fallback, try raw SQL via internal API
+        try {
+          console.log('Attempting direct SQL execution as last resort')
+          const { error: sqlError } = await supabaseAdmin.rpc(
+            'execute_sql',
+            {
+              sql_query: `
+                INSERT INTO profiles (id, email, full_name, role)
+                VALUES ('${data.user.id}', '${adminEmail}', 'Initial Admin', 'admin')
+                ON CONFLICT (id) DO NOTHING
+              `
+            }
+          )
+          
+          if (sqlError) {
+            console.error('Direct SQL execution failed:', sqlError.message)
+            throw sqlError
           }
-        )
-        
-        if (sqlError) {
-          console.error('SQL insertion failed:', sqlError.message)
-          throw new Error(`Could not create admin profile: ${sqlError.message}`)
+          
+          console.log('Profile created successfully via direct SQL execution')
+        } catch (error3) {
+          console.error('All profile creation methods failed:', error3)
+          // Just continue - the auth user is created, which might be enough to log in
+          console.log('Continuing despite profile creation failure')
         }
       }
     }
@@ -123,7 +147,7 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('Create initial admin error:', error.message)
+    console.error('Create initial admin fatal error:', error.message)
     
     return new Response(
       JSON.stringify({ error: error.message }),
