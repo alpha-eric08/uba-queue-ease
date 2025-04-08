@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,7 +33,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
         setSession(currentSession);
@@ -50,7 +48,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
@@ -150,10 +147,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const createInitialAdmin = async () => {
     try {
       setLoading(true);
-      // Call the create-initial-admin function
       const { data, error } = await supabase.functions.invoke('create-initial-admin');
       
       if (error) {
+        console.error('Error calling create-initial-admin function:', error);
         throw error;
       }
       

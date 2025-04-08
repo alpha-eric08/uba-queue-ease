@@ -85,6 +85,11 @@ const Login = () => {
               >
                 {loading ? 'Logging in...' : 'Login'}
               </Button>
+
+              <div className="text-center mt-2 text-sm">
+                <p>Default admin: owusuansaheric08@gmail.com</p>
+                <p>Password: @Owusu123</p>
+              </div>
             </form>
             
             <div className="mt-6 text-center text-sm">

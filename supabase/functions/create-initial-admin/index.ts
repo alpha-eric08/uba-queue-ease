@@ -27,6 +27,7 @@ serve(async (req) => {
     const { data: existingUsers, error: checkError } = await supabaseAdmin.auth.admin.listUsers()
     
     if (checkError) {
+      console.error('Error checking existing users:', checkError.message)
       throw checkError
     }
 
@@ -42,7 +43,7 @@ serve(async (req) => {
       )
     }
     
-    // Create the admin user
+    // Create the admin user with correct parameters
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email: adminEmail,
       password: adminPassword,
@@ -54,7 +55,23 @@ serve(async (req) => {
     })
     
     if (error) {
+      console.error('Error creating admin user:', error.message)
       throw error
+    }
+    
+    // Manually insert the profile record to ensure it's created properly
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({
+        id: data.user.id,
+        email: adminEmail,
+        full_name: 'Initial Admin',
+        role: 'super_admin'
+      })
+    
+    if (profileError) {
+      console.error('Error creating profile:', profileError.message)
+      throw new Error(`Error creating profile: ${profileError.message}`)
     }
     
     return new Response(
@@ -65,6 +82,8 @@ serve(async (req) => {
       }
     )
   } catch (error) {
+    console.error('Create initial admin error:', error.message)
+    
     return new Response(
       JSON.stringify({ error: error.message }),
       {
