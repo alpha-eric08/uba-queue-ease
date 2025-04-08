@@ -22,3 +22,6 @@ verify_jwt = false
 
 [functions.create-initial-admin]
 verify_jwt = false
+
+[functions.rpc]
+verify_jwt = false
