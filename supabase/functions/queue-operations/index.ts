@@ -89,6 +89,76 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    else if (action === 'update_status') {
+      const { queueNumber, status } = queueData;
+      
+      // Update the status in the database
+      const { data, error } = await supabaseClient
+        .from('queue_entries')
+        .update({ status })
+        .eq('queue_number', queueNumber)
+        .select();
+      
+      if (error) throw error;
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          queueEntry: data[0],
+          message: `Status successfully updated to ${status}`
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    else if (action === 'adjust_time') {
+      const { queueNumber, priority, estimatedWaitTime } = queueData;
+      let newEstimatedTime = estimatedWaitTime;
+      
+      // If priority is provided, adjust position and time accordingly
+      if (priority) {
+        // Improve position by moving up in the queue
+        const newPosition = Math.max(1, Math.floor(priority)); // Ensure it's at least 1
+        
+        const { data, error } = await supabaseClient
+          .from('queue_entries')
+          .update({ 
+            position: newPosition,
+            estimated_wait_time: newEstimatedTime
+          })
+          .eq('queue_number', queueNumber)
+          .select();
+        
+        if (error) throw error;
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            queueEntry: data[0],
+            message: 'Queue position and estimated time updated'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } 
+      else if (estimatedWaitTime) {
+        // Just update the estimated wait time
+        const { data, error } = await supabaseClient
+          .from('queue_entries')
+          .update({ estimated_wait_time: estimatedWaitTime })
+          .eq('queue_number', queueNumber)
+          .select();
+        
+        if (error) throw error;
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            queueEntry: data[0],
+            message: 'Estimated wait time updated'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
     
     return new Response(
       JSON.stringify({ success: false, message: 'Invalid action' }),

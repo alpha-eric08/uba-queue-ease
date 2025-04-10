@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { Clock, Users, Bell, BellOff, MapPin, User, Phone } from 'lucide-react';
+import { Clock, Users, Bell, BellOff, MapPin, User, Phone, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -32,6 +32,7 @@ const TrackQueue = () => {
   const [trackingData, setTrackingData] = useState<QueueData | null>(null);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Check if we have a queue number in the URL params on load
   useEffect(() => {
@@ -92,6 +93,104 @@ const TrackQueue = () => {
       toast.info('Notification Disabled', {
         description: 'You will not receive notifications about your queue position.'
       });
+    }
+  };
+
+  // New function to update queue status
+  const handleStatusUpdate = async (status: string) => {
+    if (!trackingData?.queue_number) return;
+
+    try {
+      setIsUpdating(true);
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'update_status',
+          queueData: { 
+            queueNumber: trackingData.queue_number,
+            status
+          }
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        // Update the local state with the new status
+        setTrackingData({
+          ...trackingData,
+          status: data.queueEntry.status
+        });
+        toast.success(data.message || `Status updated to ${status}`);
+      } else {
+        throw new Error(data?.message || 'Failed to update status');
+      }
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      toast.error(`Error: ${error.message || 'Failed to update status'}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // New function to update estimated time
+  const handleTimeAdjustment = async (adjustment: 'prioritize' | 'increase' | 'decrease') => {
+    if (!trackingData?.queue_number) return;
+
+    try {
+      setIsUpdating(true);
+      let newTime = trackingData.estimated_wait_time;
+      let newPriority = trackingData.position;
+      
+      if (adjustment === 'prioritize') {
+        // Move up in queue position
+        newPriority = Math.max(1, trackingData.position - 3);
+        newTime = Math.max(5, newTime - 10);
+      } else if (adjustment === 'increase') {
+        newTime = newTime + 5;
+      } else if (adjustment === 'decrease') {
+        newTime = Math.max(1, newTime - 5);
+      }
+
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'adjust_time',
+          queueData: { 
+            queueNumber: trackingData.queue_number,
+            priority: adjustment === 'prioritize' ? newPriority : null,
+            estimatedWaitTime: newTime
+          }
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        // Update the local state with the new data
+        const updatedData = {
+          ...trackingData,
+          estimated_wait_time: data.queueEntry.estimated_wait_time,
+          position: data.queueEntry.position
+        };
+        
+        // Recalculate derived values
+        const totalAhead = updatedData.position - 1;
+        const progress = Math.max(0, Math.min(100, 100 - (totalAhead / 10) * 100));
+        
+        setTrackingData({
+          ...updatedData,
+          totalAhead,
+          progress
+        });
+        
+        toast.success(data.message || 'Wait time updated');
+      } else {
+        throw new Error(data?.message || 'Failed to update wait time');
+      }
+    } catch (error: any) {
+      console.error('Error adjusting time:', error);
+      toast.error(`Error: ${error.message || 'Failed to adjust wait time'}`);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -203,6 +302,8 @@ const TrackQueue = () => {
                             ? 'bg-yellow-100 text-yellow-800' 
                             : trackingData.status === 'serving' 
                             ? 'bg-green-100 text-green-800'
+                            : trackingData.status === 'served'
+                            ? 'bg-blue-100 text-blue-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
                           {trackingData.status}
@@ -249,8 +350,26 @@ const TrackQueue = () => {
                       </div>
                       <div>
                         <div className="text-sm text-gray-500">Estimated Wait</div>
-                        <div className="text-xl font-semibold">
-                          ~{trackingData.estimated_wait_time}<span className="text-sm text-gray-500"> minutes</span>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xl font-semibold">
+                            ~{trackingData.estimated_wait_time}<span className="text-sm text-gray-500"> minutes</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={() => handleTimeAdjustment('decrease')}
+                              className="text-gray-500 hover:text-uba-red p-1 rounded"
+                              disabled={isUpdating}
+                            >
+                              <ArrowDown size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleTimeAdjustment('increase')}
+                              className="text-gray-500 hover:text-uba-red p-1 rounded"
+                              disabled={isUpdating}
+                            >
+                              <ArrowUp size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -306,16 +425,51 @@ const TrackQueue = () => {
                     </AlertDescription>
                   </Alert>
                 )}
+                
+                {trackingData.status === 'served' && (
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertTitle className="text-blue-800">Service Completed</AlertTitle>
+                    <AlertDescription className="text-blue-700">
+                      Thank you for using our services. We hope we could assist you today.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </div>
               
               <div className="bg-uba-lightgray p-6">
                 <div className="flex flex-wrap justify-center md:justify-between gap-4">
-                  <Button variant="outline" className="border-uba-gray bg-white">
-                    Change Branch
-                  </Button>
-                  <Button className="bg-uba-red hover:bg-uba-red/90">
-                    Confirm Arrival at Branch
-                  </Button>
+                  {trackingData.status === 'waiting' && (
+                    <Button 
+                      onClick={() => handleTimeAdjustment('prioritize')}
+                      variant="outline" 
+                      className="border-uba-gray bg-white"
+                      disabled={isUpdating}
+                    >
+                      Prioritize Me
+                    </Button>
+                  )}
+                  
+                  {trackingData.status === 'serving' && (
+                    <Button 
+                      onClick={() => handleStatusUpdate('served')}
+                      className="bg-uba-red hover:bg-uba-red/90 flex items-center gap-2"
+                      disabled={isUpdating}
+                    >
+                      <CheckCircle2 size={18} />
+                      Mark as Served
+                    </Button>
+                  )}
+                  
+                  {trackingData.status !== 'served' && (
+                    <Button 
+                      variant="outline" 
+                      className="border-uba-gray bg-white"
+                      onClick={() => handleSearch(null, trackingData.queue_number)}
+                      disabled={isUpdating || isLoading}
+                    >
+                      Refresh Status
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
