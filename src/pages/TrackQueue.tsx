@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
@@ -34,7 +33,6 @@ const TrackQueue = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Check if we have a queue number in the URL params on load
   useEffect(() => {
     const queueParam = searchParams.get('queue');
     if (queueParam) {
@@ -56,7 +54,6 @@ const TrackQueue = () => {
     try {
       setIsLoading(true);
       
-      // Call the queue-operations function to track queue
       const { data, error } = await supabase.functions.invoke('queue-operations', {
         body: {
           action: 'track',
@@ -68,7 +65,6 @@ const TrackQueue = () => {
       
       if (data && data.success) {
         setTrackingData(data.queueData);
-        // Update URL with queue number for easy sharing
         setSearchParams({ queue: queueToSearch });
       } else {
         throw new Error(data?.message || 'Queue number not found');
@@ -96,7 +92,6 @@ const TrackQueue = () => {
     }
   };
 
-  // New function to update queue status
   const handleStatusUpdate = async (status: string) => {
     if (!trackingData?.queue_number) return;
 
@@ -115,12 +110,26 @@ const TrackQueue = () => {
       if (error) throw error;
       
       if (data && data.success) {
-        // Update the local state with the new status
-        setTrackingData({
-          ...trackingData,
-          status: data.queueEntry.status
-        });
-        toast.success(data.message || `Status updated to ${status}`);
+        if (status === 'served') {
+          toast.success('Thank you for using our services!');
+          setTrackingData(null);
+        } else if (status === 'serving') {
+          setTrackingData({
+            ...trackingData,
+            status: 'serving',
+            position: 1,
+            estimated_wait_time: 5,
+            totalAhead: 0,
+            progress: 95
+          });
+          toast.success('Your turn now! Please proceed to the counter.');
+        } else {
+          setTrackingData({
+            ...trackingData,
+            status: data.queueEntry?.status || status
+          });
+          toast.success(data.message || `Status updated to ${status}`);
+        }
       } else {
         throw new Error(data?.message || 'Failed to update status');
       }
@@ -132,7 +141,6 @@ const TrackQueue = () => {
     }
   };
 
-  // New function to update estimated time
   const handleTimeAdjustment = async (adjustment: 'prioritize' | 'increase' | 'decrease') => {
     if (!trackingData?.queue_number) return;
 
@@ -142,7 +150,6 @@ const TrackQueue = () => {
       let newPriority = trackingData.position;
       
       if (adjustment === 'prioritize') {
-        // Move up in queue position
         newPriority = Math.max(1, trackingData.position - 3);
         newTime = Math.max(5, newTime - 10);
       } else if (adjustment === 'increase') {
@@ -165,16 +172,19 @@ const TrackQueue = () => {
       if (error) throw error;
       
       if (data && data.success) {
-        // Update the local state with the new data
         const updatedData = {
           ...trackingData,
           estimated_wait_time: data.queueEntry.estimated_wait_time,
           position: data.queueEntry.position
         };
         
-        // Recalculate derived values
-        const totalAhead = updatedData.position - 1;
-        const progress = Math.max(0, Math.min(100, 100 - (totalAhead / 10) * 100));
+        let totalAhead = updatedData.position - 1;
+        let progress = Math.max(0, Math.min(100, 100 - (totalAhead / 10) * 100));
+        
+        if (updatedData.status === 'serving') {
+          totalAhead = 0;
+          progress = 95;
+        }
         
         setTrackingData({
           ...updatedData,
@@ -194,7 +204,6 @@ const TrackQueue = () => {
     }
   };
 
-  // Helper function to get service name from service type
   const getServiceName = (serviceType: string) => {
     const serviceMap: Record<string, string> = {
       'deposit': 'Cash Deposit',
@@ -208,15 +217,12 @@ const TrackQueue = () => {
     return serviceMap[serviceType] || serviceType;
   };
   
-  // Helper function to format phone number
   const formatPhone = (phone: string) => {
-    // Simple formatting for demonstration
     return phone.length === 10 
       ? `(${phone.slice(0,3)}) ${phone.slice(3,6)}-${phone.slice(6)}`
       : phone;
   };
   
-  // Helper function to format date
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
@@ -275,7 +281,6 @@ const TrackQueue = () => {
               </div>
               
               <div className="p-6 space-y-6">
-                {/* Customer Information Section */}
                 <div className="bg-uba-lightgray rounded-lg p-4">
                   <h3 className="font-medium mb-3 flex items-center gap-2">
                     <User size={18} className="text-uba-red" />
@@ -422,15 +427,6 @@ const TrackQueue = () => {
                     <AlertTitle className="text-green-800">It's your turn!</AlertTitle>
                     <AlertDescription className="text-green-700">
                       Please proceed to the service counter. Your number is being called.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                
-                {trackingData.status === 'served' && (
-                  <Alert className="bg-blue-50 border-blue-200">
-                    <AlertTitle className="text-blue-800">Service Completed</AlertTitle>
-                    <AlertDescription className="text-blue-700">
-                      Thank you for using our services. We hope we could assist you today.
                     </AlertDescription>
                   </Alert>
                 )}

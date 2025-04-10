@@ -74,8 +74,14 @@ serve(async (req) => {
       }
       
       // Calculate additional tracking data
-      const totalAhead = data.position - 1;
-      const progress = Math.max(0, Math.min(100, 100 - (totalAhead / 10) * 100));
+      let totalAhead = data.position - 1;
+      let progress = Math.max(0, Math.min(100, 100 - (totalAhead / 10) * 100));
+      
+      // If status is serving, set position to 1, totalAhead to 0, and estimated_wait_time to 5
+      if (data.status === 'serving') {
+        totalAhead = 0;
+        progress = 95;
+      }
       
       return new Response(
         JSON.stringify({ 
@@ -92,7 +98,49 @@ serve(async (req) => {
     else if (action === 'update_status') {
       const { queueNumber, status } = queueData;
       
-      // Update the status in the database
+      // If status is "served", delete the entry
+      if (status === 'served') {
+        const { error } = await supabaseClient
+          .from('queue_entries')
+          .delete()
+          .eq('queue_number', queueNumber);
+          
+        if (error) throw error;
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Entry deleted successfully'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // If status is "serving", update position to 1 and estimated wait time to 5 minutes
+      if (status === 'serving') {
+        const { data, error } = await supabaseClient
+          .from('queue_entries')
+          .update({ 
+            status,
+            position: 1,
+            estimated_wait_time: 5 
+          })
+          .eq('queue_number', queueNumber)
+          .select();
+        
+        if (error) throw error;
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            queueEntry: data[0],
+            message: `Status updated to ${status}, position set to 1, and wait time set to 5 minutes`
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // For other statuses, just update the status
       const { data, error } = await supabaseClient
         .from('queue_entries')
         .update({ status })
