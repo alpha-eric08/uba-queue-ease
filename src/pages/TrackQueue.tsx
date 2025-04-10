@@ -141,18 +141,14 @@ const TrackQueue = () => {
     }
   };
 
-  const handleTimeAdjustment = async (adjustment: 'prioritize' | 'increase' | 'decrease') => {
+  const handleTimeAdjustment = async (adjustment: 'increase' | 'decrease') => {
     if (!trackingData?.queue_number) return;
 
     try {
       setIsUpdating(true);
       let newTime = trackingData.estimated_wait_time;
-      let newPriority = trackingData.position;
       
-      if (adjustment === 'prioritize') {
-        newPriority = Math.max(1, trackingData.position - 3);
-        newTime = Math.max(5, newTime - 10);
-      } else if (adjustment === 'increase') {
+      if (adjustment === 'increase') {
         newTime = newTime + 5;
       } else if (adjustment === 'decrease') {
         newTime = Math.max(1, newTime - 5);
@@ -163,7 +159,7 @@ const TrackQueue = () => {
           action: 'adjust_time',
           queueData: { 
             queueNumber: trackingData.queue_number,
-            priority: adjustment === 'prioritize' ? newPriority : null,
+            priority: null,
             estimatedWaitTime: newTime
           }
         }
@@ -434,17 +430,6 @@ const TrackQueue = () => {
               
               <div className="bg-uba-lightgray p-6">
                 <div className="flex flex-wrap justify-center md:justify-between gap-4">
-                  {trackingData.status === 'waiting' && (
-                    <Button 
-                      onClick={() => handleTimeAdjustment('prioritize')}
-                      variant="outline" 
-                      className="border-uba-gray bg-white"
-                      disabled={isUpdating}
-                    >
-                      Prioritize Me
-                    </Button>
-                  )}
-                  
                   {trackingData.status === 'serving' && (
                     <Button 
                       onClick={() => handleStatusUpdate('served')}

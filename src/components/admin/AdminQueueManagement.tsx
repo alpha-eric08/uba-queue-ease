@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { Search, Filter, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Search, Filter, ChevronUp, ChevronDown, ArrowUpDown, FastForward, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { QueueEntry } from '@/types/queue';
@@ -9,6 +9,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface AdminQueueManagementProps {
   queueEntries: QueueEntry[];
@@ -78,6 +86,66 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
       toast.error('Failed to update status');
     }
   };
+  
+  // Handle prioritizing a customer
+  const handlePrioritizeCustomer = async (entry: QueueEntry) => {
+    try {
+      const newPosition = Math.max(1, entry.position - 3);
+      const newWaitTime = Math.max(5, entry.estimated_wait_time - 10);
+      
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'adjust_time',
+          queueData: { 
+            queueNumber: entry.queue_number,
+            priority: newPosition,
+            estimatedWaitTime: newWaitTime
+          }
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        toast.success('Customer prioritized successfully');
+        refetchQueue();
+      } else {
+        throw new Error(data?.message || 'Failed to prioritize customer');
+      }
+    } catch (error: any) {
+      console.error('Error prioritizing customer:', error);
+      toast.error(`Error: ${error.message || 'Failed to prioritize customer'}`);
+    }
+  };
+  
+  // Handle adjusting customer wait time
+  const handleAdjustWaitTime = async (entry: QueueEntry, adjustment: number) => {
+    try {
+      const newWaitTime = Math.max(1, entry.estimated_wait_time + adjustment);
+      
+      const { data, error } = await supabase.functions.invoke('queue-operations', {
+        body: {
+          action: 'adjust_time',
+          queueData: { 
+            queueNumber: entry.queue_number,
+            estimatedWaitTime: newWaitTime
+          }
+        }
+      });
+      
+      if (error) throw error;
+      
+      if (data && data.success) {
+        toast.success('Wait time adjusted successfully');
+        refetchQueue();
+      } else {
+        throw new Error(data?.message || 'Failed to adjust wait time');
+      }
+    } catch (error: any) {
+      console.error('Error adjusting wait time:', error);
+      toast.error(`Error: ${error.message || 'Failed to adjust wait time'}`);
+    }
+  };
 
   const filteredQueueEntries = queueEntries.filter(entry => 
     (entry.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -137,81 +205,110 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
                   <div className="flex items-center gap-1">
                     Number
                     <ArrowUpDown size={14} />
                   </div>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Service
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                </TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Service</TableHead>
+                <TableHead>
                   <div className="flex items-center gap-1">
                     Wait Time
                     <ArrowUpDown size={14} />
                   </div>
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+                </TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Position</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredQueueEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-gray-500">
                     No customers in queue matching your criteria
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 filteredQueueEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <TableRow key={entry.id}>
+                    <TableCell>
                       <div className="font-medium text-uba-red">{entry.queue_number}</div>
                       <div className="text-xs text-gray-500">
                         {format(new Date(entry.created_at), 'h:mm a')}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {entry.name}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium">{entry.name}</div>
                       <div className="text-xs text-gray-500">{entry.phone}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    </TableCell>
+                    <TableCell className="text-sm text-gray-500">
                       {entry.service_type}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-900">{entry.estimated_wait_time} mins</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-900">{entry.estimated_wait_time} mins</span>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleAdjustWaitTime(entry, -5)}
+                          >
+                            <ArrowDown size={14} />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleAdjustWaitTime(entry, 5)}
+                          >
+                            <ArrowUp size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       {getStatusBadge(entry.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2 items-center">
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium">{entry.position}</span>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleMoveCustomer(entry.id, 'up')}
+                          >
+                            <ChevronUp size={14} />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleMoveCustomer(entry.id, 'down')}
+                          >
+                            <ChevronDown size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 items-center">
                         <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleMoveCustomer(entry.id, 'up')}
+                          variant="outline" 
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => handlePrioritizeCustomer(entry)}
                         >
-                          <ChevronUp size={16} />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleMoveCustomer(entry.id, 'down')}
-                        >
-                          <ChevronDown size={16} />
+                          <FastForward size={14} />
+                          Prioritize
                         </Button>
                         <Button 
                           variant="default" 
@@ -223,12 +320,12 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
                           {entry.status === 'serving' ? 'Serving' : 'Serve'}
                         </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
       
