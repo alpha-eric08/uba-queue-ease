@@ -1,7 +1,16 @@
-
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { Search, Filter, ChevronUp, ChevronDown, ArrowUpDown, FastForward, Clock } from 'lucide-react';
+import { 
+  Search, 
+  Filter, 
+  ChevronUp, 
+  ChevronDown, 
+  ArrowUpDown, 
+  FastForward, 
+  Clock,
+  ArrowDown,
+  ArrowUp
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { QueueEntry } from '@/types/queue';
@@ -28,10 +37,8 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState('all');
 
-  // Get unique service types for filter dropdown
   const serviceTypes = Array.from(new Set(queueEntries.map(entry => entry.service_type)));
 
-  // Handle moving customer in queue
   const handleMoveCustomer = async (id: string, direction: 'up' | 'down') => {
     try {
       const currentIndex = queueEntries.findIndex(customer => customer.id === id);
@@ -46,7 +53,6 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
       const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
       const otherEntry = queueEntries[newIndex];
       
-      // Swap positions
       const { error: error1 } = await supabase
         .from('queue_entries')
         .update({ position: otherEntry.position })
@@ -68,7 +74,6 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
     }
   };
 
-  // Handle serving a customer
   const handleServeCustomer = async (id: string) => {
     try {
       const { error } = await supabase
@@ -87,7 +92,6 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
     }
   };
   
-  // Handle prioritizing a customer
   const handlePrioritizeCustomer = async (entry: QueueEntry) => {
     try {
       const newPosition = Math.max(1, entry.position - 3);
@@ -118,7 +122,6 @@ const AdminQueueManagement = ({ queueEntries, isLoadingQueue, refetchQueue }: Ad
     }
   };
   
-  // Handle adjusting customer wait time
   const handleAdjustWaitTime = async (entry: QueueEntry, adjustment: number) => {
     try {
       const newWaitTime = Math.max(1, entry.estimated_wait_time + adjustment);
