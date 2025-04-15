@@ -1,9 +1,11 @@
+// firebase-auth-context.tsx
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut as firebaseSignOut, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Database } from '@/integrations/supabase/types';
+import { auth, db } from '@/integrations/firebase.config';
 
 interface UserProfile {
   id: string;
@@ -13,9 +15,8 @@ interface UserProfile {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: FirebaseUser | null;
   profile: UserProfile | null;
-  session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -26,55 +27,33 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, currentSession) => {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-        
-        if (currentSession?.user) {
-          setTimeout(() => {
-            fetchUserProfile(currentSession.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      
-      if (currentSession?.user) {
-        fetchUserProfile(currentSession.user.id);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        await fetchUserProfile(firebaseUser.uid);
+      } else {
+        setProfile(null);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (uid: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        setProfile(data as UserProfile);
+      const docRef = doc(db, 'profiles', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as UserProfile);
+      } else {
+        setProfile(null);
       }
     } catch (error: any) {
       console.error('Error fetching user profile:', error.message);
@@ -84,19 +63,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (data?.user) {
-        toast.success('Signed in successfully!');
-        navigate('/admin');
-      }
+      await signInWithEmailAndPassword(auth, email, password);
+      toast.success('Signed in successfully!');
+      navigate('/admin');
     } catch (error: any) {
       toast.error(`Error signing in: ${error.message}`);
     } finally {
@@ -106,10 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        throw error;
-      }
+      await firebaseSignOut(auth);
       toast.success('Signed out successfully!');
       navigate('/login');
     } catch (error: any) {
@@ -120,22 +86,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const createAdmin = async (email: string, password: string, fullName: string) => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName,
-          role: 'admin'
-        }
-      });
 
-      if (error) {
-        throw error;
-      }
+      // Create user via Firebase Admin SDK or secure Cloud Function (not client-side)
+      const { uid } = await createUserWithEmailAndPassword(auth, email, password).then(res => res.user);
+
+      const profileData: UserProfile = {
+        id: uid,
+        email,
+        full_name: fullName,
+        role: 'admin'
+      };
+
+      await setDoc(doc(db, 'profiles', uid), profileData);
 
       toast.success(`Admin user ${email} created successfully!`);
-      return;
     } catch (error: any) {
       toast.error(`Error creating admin: ${error.message}`);
       throw error;
@@ -147,15 +111,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const createInitialAdmin = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('create-initial-admin');
-      
-      if (error) {
-        console.error('Error calling create-initial-admin function:', error);
-        throw error;
-      }
-      
-      toast.success('Initial admin user created successfully! You can now log in with the default credentials.');
-      return data;
+      // This should be done via a secure backend endpoint or Cloud Function
+      // For now, simulate by creating a default admin:
+      const defaultEmail = 'admin@example.com';
+      const defaultPassword = 'AdminPass123!';
+      const fullName = 'Super Admin';
+
+      const { user: newUser } = await createUserWithEmailAndPassword(auth, defaultEmail, defaultPassword);
+
+      const profileData: UserProfile = {
+        id: newUser.uid,
+        email: defaultEmail,
+        full_name: fullName,
+        role: 'super_admin'
+      };
+
+      await setDoc(doc(db, 'profiles', newUser.uid), profileData);
+
+      toast.success('Initial admin user created successfully!');
     } catch (error: any) {
       console.error('Error creating initial admin:', error);
       toast.error(`Error creating initial admin: ${error.message || 'Unknown error'}`);
@@ -165,16 +138,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      profile, 
-      session, 
-      loading, 
-      signIn, 
-      signOut, 
-      createAdmin, 
-      createInitialAdmin
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        signIn,
+        signOut,
+        createAdmin,
+        createInitialAdmin,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

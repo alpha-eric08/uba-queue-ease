@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import CreateAccount from './pages/Signup';
 
 // Create a new instance of QueryClient
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const AppRoutes = () => (
       </ProtectedRoute>
     } />
     <Route path="/login" element={<Login />} />
+    <Route path="/signup" element={<CreateAccount />} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

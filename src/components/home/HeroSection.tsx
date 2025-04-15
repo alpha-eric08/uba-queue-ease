@@ -14,12 +14,12 @@ import {
 const HeroSection = () => {
   const [selectedBranch, setSelectedBranch] = useState("");
   const branches = [
-    "Marina Branch, Lagos",
-    "Lekki Phase 1 Branch, Lagos", 
-    "Garki Branch, Abuja",
-    "Wuse II Branch, Abuja",
-    "Ikeja Branch, Lagos",
-    "Ring Road Branch, Ibadan"
+    "Adum Branch, Kumasi",
+    "Asafo Branch, Kumasi", 
+    "Circle Branch, Accra",
+    "Lapaz Branch, Accra",
+    "Campus Branch, Tanoso",
+    "Ring Road Branch, Sunyani"
   ];
 
   return (
